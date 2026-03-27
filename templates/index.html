@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Poultry Monitoring Dashboard</title>
+
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <script>
+    window.__FIREBASE_CONFIG__ = {{ firebase_config | tojson | safe }};
+    window.__RTDB_PATH__ = {{ rtdb_path | tojson | safe }};
+    window.__THRESHOLDS__ = {{ thresholds | tojson | safe }};
+  </script>
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="side-top">
+        <div class="brand">
+          <div class="brand-logo"><i class="fa-solid fa-feather-pointed"></i></div>
+          <div class="brand-text">
+            <div class="brand-title">Poultry</div>
+            <div class="brand-sub">Realtime + AI</div>
+          </div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a class="nav-item active" href="#"><i class="fa-solid fa-gauge-high"></i><span>Dashboard</span></a>
+        <a class="nav-item" href="#"><i class="fa-solid fa-chart-line"></i><span>Graphs</span></a>
+        <a class="nav-item" href="#"><i class="fa-solid fa-video"></i><span>Camera</span></a>
+        <a class="nav-item" href="#"><i class="fa-solid fa-bell"></i><span>Alerts</span></a>
+        <a class="nav-item" href="#"><i class="fa-solid fa-images"></i><span>Snapshots</span></a>
+      </nav>
+
+      <div class="side-footer">
+        <div class="mini-card">
+          <div class="mini-title">Firebase</div>
+          <div id="connBadge" class="pill warn"><i class="fa-solid fa-wifi"></i> Connecting</div>
+          <div class="mini-sub" id="lastUpdate">Last update: --</div>
+        </div>
+
+        <div class="mini-card mt">
+          <div class="mini-title">AI Summary</div>
+          <div class="mini-sub">Status: <b id="aiLabelSide">--</b></div>
+          <div class="mini-sub">Conf: <b id="aiConfSide">--</b></div>
+          <div class="mini-sub">Counts: <b id="aiCountsSide">--</b></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="page-title">
+          <div class="h1">Dashboard</div>
+          <div class="h2">Realtime Sensors + YOLO Chicken Behavior</div>
+        </div>
+
+        <div class="top-right">
+          <div class="search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input placeholder="Search..." />
+          </div>
+
+          <button id="btnSnapshot" class="btn primary">
+            <i class="fa-solid fa-camera"></i>
+            Snapshot
+          </button>
+
+          <div class="user">
+            <div class="avatar"><i class="fa-solid fa-user"></i></div>
+          </div>
+        </div>
+      </header>
+
+      <section class="kpi-row">
+        <div class="kpi kpi-temp">
+          <div class="kpi-head">
+            <div class="kpi-name">Temperature</div>
+            <i class="fa-solid fa-temperature-half"></i>
+          </div>
+          <div class="kpi-val"><span id="kTemp">--</span><span class="unit">°C</span></div>
+          <div class="kpi-foot">Thresholds: <span class="muted" id="tRange">--</span></div>
+        </div>
+
+        <div class="kpi kpi-hum">
+          <div class="kpi-head">
+            <div class="kpi-name">Humidity</div>
+            <i class="fa-solid fa-droplet"></i>
+          </div>
+          <div class="kpi-val"><span id="kHum">--</span><span class="unit">%</span></div>
+          <div class="kpi-foot">Thresholds: <span class="muted" id="hRange">--</span></div>
+        </div>
+
+        <div class="kpi kpi-gas">
+          <div class="kpi-head">
+            <div class="kpi-name">Gas</div>
+            <i class="fa-solid fa-smog"></i>
+          </div>
+          <div class="kpi-val"><span id="kGas">--</span><span class="unit">ppm</span></div>
+          <div class="kpi-foot">High: <span class="muted" id="gRange">--</span></div>
+        </div>
+
+        <div class="kpi kpi-water">
+          <div class="kpi-head">
+            <div class="kpi-name">Water</div>
+            <i class="fa-solid fa-water"></i>
+          </div>
+          <div class="kpi-val"><span id="kWater">--</span><span class="unit">%</span></div>
+          <div class="kpi-foot">Low: <span class="muted" id="wRange">--</span></div>
+        </div>
+      </section>
+
+      <!-- Manual Controls Section -->
+      <section class="controls-row">
+        <div class="card manual-controls">
+          <div class="card-head">
+            <div class="card-title"><i class="fa-solid fa-sliders"></i> Manual Controls</div>
+            <div class="muted">Direct system control</div>
+          </div>
+          
+          <div class="control-grid">
+            <div class="control-item">
+              <div class="control-info">
+                <div class="control-name"><i class="fa-solid fa-bowl-food"></i> Feeder</div>
+                <div class="control-status" id="feederStatus">OFF</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="feederToggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="control-item">
+              <div class="control-info">
+                <div class="control-name"><i class="fa-solid fa-droplet"></i> Water Pump</div>
+                <div class="control-status" id="waterStatus">OFF</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="waterToggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="control-item">
+              <div class="control-info">
+                <div class="control-name"><i class="fa-solid fa-lightbulb"></i> Lights</div>
+                <div class="control-status" id="lightsStatus">ON</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="lightsToggle" checked>
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="control-item">
+              <div class="control-info">
+                <div class="control-name"><i class="fa-solid fa-fan"></i> Ventilation</div>
+                <div class="control-status" id="ventilationStatus">OFF</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="ventilationToggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="control-item">
+              <div class="control-info">
+                <div class="control-name"><i class="fa-solid fa-fire"></i> Heater</div>
+                <div class="control-status" id="heaterStatus">OFF</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="heaterToggle">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            
+            <div class="control-item last-feed">
+              <div class="control-info">
+                <div class="control-name"><i class="fa-solid fa-clock"></i> Last Feeding</div>
+                <div class="control-status" id="lastFeedTime">Never</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feeding Schedule Section -->
+        <div class="card feeding-schedule">
+          <div class="card-head">
+            <div class="card-title"><i class="fa-solid fa-calendar-clock"></i> Feeding Schedule</div>
+            <div class="muted">Automated feeding times</div>
+          </div>
+          
+          <div class="schedule-header">
+            <label class="toggle-switch schedule-master">
+              <input type="checkbox" id="scheduleEnabled" checked>
+              <span class="toggle-slider"></span>
+            </label>
+            <div class="schedule-status">
+              <div class="schedule-title">Schedule Active</div>
+              <div class="schedule-subtitle">Next: <span id="nextFeeding">07:00</span></div>
+            </div>
+          </div>
+
+          <div class="schedule-list">
+            <div class="schedule-item">
+              <div class="schedule-time">
+                <input type="time" value="07:00" id="schedule1Time">
+              </div>
+              <div class="schedule-duration">
+                <input type="number" value="30" min="5" max="120" id="schedule1Duration">
+                <span>sec</span>
+              </div>
+              <label class="toggle-switch schedule-item-toggle">
+                <input type="checkbox" checked id="schedule1Enabled">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="schedule-item">
+              <div class="schedule-time">
+                <input type="time" value="12:00" id="schedule2Time">
+              </div>
+              <div class="schedule-duration">
+                <input type="number" value="30" min="5" max="120" id="schedule2Duration">
+                <span>sec</span>
+              </div>
+              <label class="toggle-switch schedule-item-toggle">
+                <input type="checkbox" checked id="schedule2Enabled">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+
+            <div class="schedule-item">
+              <div class="schedule-time">
+                <input type="time" value="18:00" id="schedule3Time">
+              </div>
+              <div class="schedule-duration">
+                <input type="number" value="30" min="5" max="120" id="schedule3Duration">
+                <span>sec</span>
+              </div>
+              <label class="toggle-switch schedule-item-toggle">
+                <input type="checkbox" checked id="schedule3Enabled">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="schedule-actions">
+            <button class="btn secondary" id="feedNowBtn">
+              <i class="fa-solid fa-play"></i> Feed Now (30s)
+            </button>
+            <button class="btn primary" id="updateScheduleBtn">
+              <i class="fa-solid fa-save"></i> Update Schedule
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <div class="card card-wide">
+          <div class="card-head">
+            <div class="card-title"><i class="fa-solid fa-chart-area"></i> Sensor Trends</div>
+            <div class="card-actions">
+              <label class="toggle">
+                <input type="checkbox" id="toggleIndividuals">
+                <span class="toggle-ui"></span>
+              </label>
+              <span class="muted">Individual graphs</span>
+            </div>
+          </div>
+
+          <div class="chart-area">
+            <canvas id="combinedChart"></canvas>
+          </div>
+
+          <div id="individualCharts" class="charts-2col hidden">
+            <div class="chart-box"><div class="chart-title">Temperature</div><div class="chart-mini"><canvas id="tChart"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">Humidity</div><div class="chart-mini"><canvas id="hChart"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">Gas</div><div class="chart-mini"><canvas id="gChart"></canvas></div></div>
+            <div class="chart-box"><div class="chart-title">Water</div><div class="chart-mini"><canvas id="wChart"></canvas></div></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title"><i class="fa-solid fa-video"></i> Live Camera</div>
+            <div class="muted">YOLO overlay</div>
+          </div>
+
+          <div class="camera">
+            <img src="/video_feed" alt="camera stream">
+          </div>
+
+          <div class="ai-row">
+            <div class="ai-box">
+              <div class="ai-k">AI Status</div>
+              <div class="ai-v" id="aiLabel">--</div>
+            </div>
+            <div class="ai-box">
+              <div class="ai-k">Confidence</div>
+              <div class="ai-v" id="aiConf">--</div>
+            </div>
+          </div>
+
+          <div class="ai-box full">
+            <div class="ai-k">Counts</div>
+            <div class="ai-v small" id="aiCounts">--</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div class="card-title"><i class="fa-solid fa-bell"></i> Alerts</div>
+            <div class="muted">Threshold + AI</div>
+          </div>
+          <div id="alertsList" class="alerts"></div>
+        </div>
+
+        <div class="card card-wide">
+          <div class="card-head">
+            <div class="card-title"><i class="fa-solid fa-images"></i> Snapshots</div>
+            <div class="muted">Auto + manual</div>
+          </div>
+          <div id="snapGrid" class="snap-grid"></div>
+        </div>
+      </section>
+
+      <div id="toast" class="toast hidden"></div>
+    </main>
+  </div>
+
+  <script type="module" src="/static/dashboard.js"></script>
+</body>
+</html>
